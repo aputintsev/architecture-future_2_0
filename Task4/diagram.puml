@@ -1,0 +1,129 @@
+@startuml diagram
+!theme plain
+skinparam backgroundColor #FAFAFA
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam shadowing false
+skinparam RoundCorner 8
+
+skinparam rectangle {
+    BorderColor #555555
+    BorderThickness 1
+    FontSize 11
+}
+
+title <b>«Будущее 2.0» — Облачная инфраструктура (Yandex Cloud)\nСиним — ресурсы Terraform; серым — ручное развёртывание; красной границей — регуляторный барьер (ФЗ-323)
+
+legend right
+  |= Цвет/граница |= Значение |
+  |<#4A90D9> Синий  | Terraform |
+  |<#E8E8E8> Серый  | Вручную   |
+  |<#CC0000> Красная граница | Доступ только из AI-суб-сети (ФЗ-323) |
+endlegend
+
+' ─── Internet ────────────────────────────────────────────────────────────────
+rectangle "Internet" as internet #E8E8E8 {
+}
+
+' ─── Yandex Cloud boundary ───────────────────────────────────────────────────
+rectangle "Yandex Cloud" as yc #EAF4FB {
+
+  ' ─── Object Storage ──────────────────────────────────────────────────────
+  rectangle "Object Storage (S3)\n<b>future20-datalake</b>\nВерсионирование включено\n[Terraform]" as s3 #4A90D9
+
+  ' ─── VPC ─────────────────────────────────────────────────────────────────
+  rectangle "VPC: future20-vpc  10.0.0.0/16  [Terraform]" as vpc #D6EAF8 {
+
+    rectangle "NAT Gateway\nfuture20-nat-gw\n[Terraform]" as natgw #4A90D9
+
+    ' ── Management subnet ──────────────────────────────────────────────────
+    rectangle "Management Subnet  10.0.0.0/24  zone-a  [Terraform]" as mgmt_net #D5E8D4 {
+
+      rectangle "VM: monitoring\n2 vCPU / 4 GB RAM / 30 GB SSD\nGrafana :3000  Prometheus :9090\n[Terraform]" as vm_mon #4A90D9
+
+      rectangle "Static Public IP\nfuture20-monitoring-ip\n[Terraform]" as static_ip #4A90D9
+
+      rectangle "DNS-запись\n[Вручную]" as dns #E8E8E8
+
+      rectangle "SSL-сертификат\n[Вручную]" as ssl #E8E8E8
+
+      rectangle "SG: sg-management\nSSH :22, Grafana :3000\nPrometheus :9090\n[Terraform]" as sg_mgmt #4A90D9
+    }
+
+    ' ── Data Platform subnet ───────────────────────────────────────────────
+    rectangle "Data Platform Subnet  10.0.1.0/24  zone-a  [Terraform]\n(немедицинские домены: финтех, клиники, партнёры, аналитика)" as dp_net #FFF2CC {
+
+      rectangle "VM: kafka\n4 vCPU / 16 GB / Boot 50 GB\n+500 GB SSD data disk\nKafka :9092\n[Terraform]" as vm_kafka #4A90D9
+
+      rectangle "VM: nessie\n2 vCPU / 4 GB / 30 GB SSD\nNessie REST :19120\n[Terraform]" as vm_nessie #4A90D9
+
+      rectangle "Kafka Topics\n(конфигурация)\n[Вручную]" as kafka_topics #E8E8E8
+
+      rectangle "SG: sg-data-platform\nKafka :9092 ← data-platform/analytics/ai\nNessie :19120 ← data-platform/analytics\nSSH :22 ← mgmt only\n[Terraform]" as sg_dp #4A90D9
+    }
+
+    ' ── Analytics subnet ───────────────────────────────────────────────────
+    rectangle "Analytics Subnet  10.0.2.0/24  zone-b  [Terraform]\n(аналитика данных, финтех, управление клиниками)" as an_net #F8CECC {
+
+      rectangle "VM: dremio\n8 vCPU / 32 GB / Boot 100 GB\n+200 GB SSD local cache\nDremio UI :9047  JDBC :31010\n[Terraform]" as vm_dremio #4A90D9
+
+      rectangle "VM: airflow\n4 vCPU / 8 GB / Boot 50 GB\nAirflow WebServer :8080\n[Terraform]" as vm_airflow #4A90D9
+
+      rectangle "Airflow DAGs\n[Вручную]" as dags #E8E8E8
+
+      rectangle "Dremio Sources\n& Reflections\n[Вручную]" as dremio_cfg #E8E8E8
+
+      rectangle "SG: sg-analytics\nDremio :9047/:31010\nAirflow :8080\nSSH :22 ← mgmt only\n[Terraform]" as sg_an #4A90D9
+    }
+
+    ' ── AI subnet ──────────────────────────────────────────────────────────
+    rectangle "AI Subnet  10.0.3.0/24  zone-b  [Terraform]\n(ИИ-сервисы для медицинской аналитики)" as ai_net #E1D5E7 {
+      rectangle "AI-сервисы\n(ВМ / GPU — будущее развитие)\n[Будущее развитие]" as vm_ai #E8E8E8
+    }
+
+    ' ── Medical subnet — regulatory boundary ──────────────────────────────
+    rectangle "<color:red><b>⚠ MEDICAL Subnet  10.0.4.0/24  zone-a  [Terraform]</b></color>\n<color:red>Регуляторный барьер: ФЗ-323, 152-ФЗ</color>\n<color:red>Доступ только из AI-суб-сети. Analytics ЗАПРЕЩЁН.</color>" as med_net #FFE6E6 {
+
+      rectangle "VM: kafka-medical\n4 vCPU / 16 GB / Boot 50 GB\n+500 GB SSD data disk\nKafka (медицинские топики) :9092\n[Terraform]" as vm_kafka_med #4A90D9
+
+      rectangle "VM: nessie-medical\n2 vCPU / 4 GB / 30 GB SSD\nNessie REST (medical catalog) :19120\n[Terraform]" as vm_nessie_med #4A90D9
+
+      rectangle "<color:red>SG: sg-medical</color>\nKafka :9092 ← <b>ai only</b>\nNessie :19120 ← <b>ai only</b>\nSSH :22 ← mgmt only\n[Terraform]" as sg_med #4A90D9
+    }
+
+  }
+}
+
+' ─── Relationships ────────────────────────────────────────────────────────────
+internet --> static_ip : HTTPS/SSH
+static_ip --> vm_mon
+
+vm_mon --> vm_kafka : Prometheus scrape
+vm_mon --> vm_nessie : Prometheus scrape
+vm_mon --> vm_dremio : Prometheus scrape
+vm_mon --> vm_airflow : Prometheus scrape
+vm_mon --> vm_kafka_med : Prometheus scrape
+vm_mon --> vm_nessie_med : Prometheus scrape
+
+vm_kafka -[dashed]-> natgw : исходящий трафик
+vm_dremio -[dashed]-> natgw
+vm_airflow -[dashed]-> natgw
+vm_kafka_med -[dashed]-> natgw
+natgw --> internet
+
+vm_airflow --> vm_kafka : читает/пишет\nнемедицинские события
+vm_airflow --> s3 : загружает Parquet\n(немедицинские данные)
+vm_dremio --> s3 : SQL-запросы\nк Data Lake
+vm_dremio --> vm_nessie : Iceberg catalog\n(немедицинский)
+
+vm_ai --> vm_kafka_med : <color:red>медицинские события\n(AI only)</color>
+vm_ai --> vm_nessie_med : <color:red>Iceberg catalog\n(medical, AI only)</color>
+vm_ai --> s3 : результаты\nАИ-анализа
+
+dns -[dashed]-> static_ip
+ssl -[dashed]-> vm_mon
+kafka_topics -[dashed]-> vm_kafka
+dags -[dashed]-> vm_airflow
+dremio_cfg -[dashed]-> vm_dremio
+
+@enduml
